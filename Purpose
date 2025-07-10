@@ -1,0 +1,75 @@
+Calculation of SDG 2.4.1. sub-indicators.
+DeepSeek guidelines followed
+Several **FAO SDG 2.4.1 sub-indicators** can be estimated using **FADN Farm Return Data (FRD) or Individual Standard Results (ISR)**, though some require proxies or additional assumptions. Below is a breakdown of feasible sub-indicators, methodological notes, and Python examples for estimation:
+---
+### **Feasible SDG 2.4.1 Sub-Indicators Using FADN Data**
+| Sub-Indicator                 | FADN Variable(s) Used                          | Calculation Approach                          | Notes/Limitations                          |
+|-------------------------------|-----------------------------------------------|-----------------------------------------------|--------------------------------------------|
+| **1. Farm output value per ha** | `SE020` (Total Output), `SE025` (UAA)         | `SE020 / SE025`                               | Direct calculation.                        |
+| **2. Net Farm Income (NFI)**   | `SE020`, `SE270` (Total Costs), `SE410` (Subsidies), `SE420` (Taxes), `SE480` (Depreciation) | `SE020 - SE270 + (SE410 - SE420) - SE480` | Excludes non-monetary income.              |
+| **3. Income volatility**       | `SE020` (multi-year panel)                    | Coefficient of Variation (CV) of `SE020`      | Requires longitudinal FADN data.           |
+| **4. Yield variability**       | Crop-specific output (e.g., `SE011` for cereals), UAA | CV of yield (`Output / Area`)           | Crop-specific FADN variables needed.       |
+| **5. Input use efficiency**    | `SE020` (Output), `SE260` (Variable Costs)    | `SE020 / SE260`                               | Proxy for economic efficiency.             |
+| **6. Nitrogen balance**        | Not directly available                        | Proxy: Fertilizer costs (`SE260`) per ha      | Approximate; lacks physical N quantities.  |
+| **7. Soil organic matter**     | Not available                                 | Not estimable with FADN                       | Requires soil sampling data.               |
+| **8. Water use efficiency**    | Not directly available                        | Proxy: Irrigation costs (`SE260`) per ha      | Limited accuracy.                          |
+| **9. Wage rate in agriculture**| `SE275` (Labor Costs), `SE010` (AWU)          | `SE275 / SE010`                               | Excludes unpaid labor.                     |
+| **10. Energy use efficiency**  | `SE260` (Energy costs), `SE020` (Output)      | `SE020 / SE260_energy`                        | Requires isolating energy costs.           |
+---
+### **Sub-Indicators Not Feasible with FADN**
+- **7. Soil organic matter** (requires soil tests).  
+- **11. Agro-biodiversity** (crop diversity metrics need plot-level data).  
+- **12. Resilience practices** (no direct data on crop rotation/agroforestry).  
+---
+### **Workarounds for Partially Estimable Indicators**
+| Sub-Indicator  | Proxy Approach                                | FADN Variables                          |
+|----------------|----------------------------------------------|-----------------------------------------|
+| **6. Nitrogen balance** | Fertilizer cost per ha (`SE260_fertilizer / SE025`) | `SE260` (filter fertilizer items) |
+| **8. Water use efficiency** | Irrigation cost per ha (`SE260_irrigation / SE025`) | `SE260` (filter irrigation) |
+---
+### **Python Examples for Key Sub-Indicators**
+
+#### **3. Income Volatility (CV of Output)**
+```python
+# Requires panel data (farms tracked across years)
+panel = pd.read_csv("fadn_panel_data.csv")  # Columns: ['year', 'farm_id', 'SE020', 'W']
+
+# Calculate CV per farm (weighted)
+cv = panel.groupby('farm_id').apply(
+    lambda x: np.std(x['SE020']) / np.mean(x['SE020'])
+)
+weighted_cv = DescrStatsW(cv, weights=panel.groupby('farm_id')['W'].first()).mean
+print(f"Weighted Mean CV of Output: {weighted_cv:.2f}")
+```
+
+#### **5. Input Use Efficiency (Output/Variable Costs)**
+```python
+fadn["input_efficiency"] = fadn["SE020"] / fadn["SE260"]
+svy_mean = TaylorEstimator(param="mean").estimate(y=fadn["input_efficiency"], weight=fadn["W"])
+print(f"Mean Efficiency: {svy_mean.mean[0]:.2f}")
+```
+
+#### **10. Energy Use Efficiency**
+```python
+# Isolate energy costs (e.g., SE260_energy = fuel/electricity subset)
+energy_costs = fadn["SE260_fuel"] + fadn["SE260_electricity"]  # Adjust based on FADN
+fadn["energy_efficiency"] = fadn["SE020"] / energy_costs
+weighted_stats = DescrStatsW(fadn["energy_efficiency"], weights=fadn["W"])
+print(f"Energy Efficiency (€/€): {weighted_stats.mean:.2f}")
+```
+
+---
+
+
+### **Key Considerations**
+1. **Weighting**: Always use FADN extrapolation weights (`W`) for representativeness.  
+2. **Validation**: Cross-check with national data (e.g., Eurostat, FAO AGRIS).  
+3. **Proxies**: Document limitations when using cost-based proxies (e.g., energy costs ≠ actual energy use).  
+
+---
+
+### **Resources**
+- **FADN Variable Glossary**: [EU FADN Handbook](https://ec.europa.eu/agriculture/rica/)  
+- **FAO SDG 2.4.1 Metadata**: [FAO Indicators](http://www.fao.org/sustainable-development-goals/indicators/241/en/)  
+
+Let me know if you’d like detailed code for a specific sub-indicator!
